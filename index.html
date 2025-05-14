@@ -1,30 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>行動版食物分類遊戲（隊伍模式）</title>
+    <title>行動版食物分類遊戲（拖曳支援）</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
     <style>
         body { padding: 10px; font-size: 16px; }
         .upload-section { display: flex; gap: 10px; margin-bottom: 20px; }
-        #food-image { width: 200px; height: 200px; border: 2px dashed #ccc; margin: 0 auto 20px auto; display: flex; align-items: center; justify-content: center;}
-        .category-row { display: flex; flex-direction: row; justify-content: center; gap: 30px; margin-bottom: 20px;}
-        .cat-btn {
-            flex: 1 1 0;
-            min-width: 120px;
-            height: 80px;
-            font-size: 22px;
-            border: 3px solid #333;
-            border-radius: 12px;
-            margin: 0 10px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        .cat-btn.good { background: #e8f5e9; }
-        .cat-btn.bad { background: #ffebee; }
-        .cat-btn:active { filter: brightness(0.95);}
-        #score-board { font-size: 24px; color: #2e7d32; margin: 15px 0; padding: 10px; background-color: #f5f5f5; border-radius: 5px; display: inline-block;}
-        .feedback { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 40px; display: none; z-index: 1000;}
-        button { padding: 12px 20px; font-size: 16px; }
         .team-row { display: flex; gap: 10px; margin-bottom: 10px; justify-content: center;}
         .team-btn {
             padding: 8px 18px;
@@ -57,7 +39,36 @@
             font-size: 18px;
         }
         #current-team { font-size: 18px; margin-bottom: 10px; color: #1976d2;}
+        #score-board { font-size: 24px; color: #2e7d32; margin: 15px 0; padding: 10px; background-color: #f5f5f5; border-radius: 5px; display: inline-block;}
+        .feedback { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 40px; display: none; z-index: 1000;}
+        .main-flex { display: flex; flex-direction: row; gap: 20px; justify-content: center; margin-bottom: 20px;}
+        .drop-zone {
+            width: 200px;
+            min-height: 220px;
+            border: 3px solid #333;
+            padding: 10px;
+            border-radius: 14px;
+            background: #f7f7f7;
+        }
+        #good-zone { background-color: #e8f5e9; }
+        #bad-zone { background-color: #ffebee; }
+        #pending-zone { background-color: #e3f2fd; }
+        .zone-title { font-weight: bold; text-align: center; margin-bottom: 8px; }
+        .food-img {
+            width: 100%;
+            max-width: 160px;
+            max-height: 160px;
+            margin: 0 auto 8px auto;
+            display: block;
+            border: 2px solid #bbb;
+            border-radius: 8px;
+            background: #fff;
+            object-fit: contain;
+        }
+        button { padding: 12px 20px; font-size: 16px; }
     </style>
+    <!-- 引入 SortableJS 支援觸控拖曳 -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 </head>
 <body>
     <div class="upload-section">
@@ -101,13 +112,19 @@
         </tbody>
     </table>
 
-    <button onclick="fetchNewFood()">取得食物照片</button>
+    <button onclick="addRandomFoodToPending()">取得食物照片</button>
     <div id="score-board">本隊分數：0</div>
-    <div id="food-image"></div>
     
-    <div class="category-row">
-        <button class="cat-btn good" onclick="chooseCategory('good')">好食物區</button>
-        <button class="cat-btn bad" onclick="chooseCategory('bad')">壞食物區</button>
+    <div class="main-flex">
+        <div class="drop-zone" id="good-zone">
+            <div class="zone-title">好食物區</div>
+        </div>
+        <div class="drop-zone" id="pending-zone">
+            <div class="zone-title">待分類</div>
+        </div>
+        <div class="drop-zone" id="bad-zone">
+            <div class="zone-title">壞食物區</div>
+        </div>
     </div>
 
     <div id="correct-feedback" class="feedback">✅ 正確！</div>
@@ -149,7 +166,6 @@
             currentTeam = team;
             document.getElementById('current-team-name').innerText = team;
             document.getElementById('score-board').innerText = `本隊分數：${teams[team].score}`;
-            // 標示選取
             document.querySelectorAll('.team-btn').forEach(btn=>btn.classList.remove('selected'));
             document.getElementById('team-lychee').classList.toggle('selected', team==='荔枝隊');
             document.getElementById('team-grape').classList.toggle('selected', team==='萄葡隊');
@@ -166,10 +182,11 @@
                 document.getElementById('score-board').innerText = `本隊分數：${teams[currentTeam].score}`;
         }
 
-        // 遊戲邏輯
-        let currentFood = null;
+        // 拖曳邏輯
+        // 儲存目前待分類的食物資訊
+        let pendingFood = null;
 
-        function fetchNewFood() {
+        function addRandomFoodToPending() {
             if (!currentTeam) {
                 alert('請先選擇隊伍！');
                 return;
@@ -181,50 +198,100 @@
             const allFoods = [...foodDB.good, ...foodDB.bad];
             if (allFoods.length === 0) {
                 alert('請先上傳照片！');
-                document.getElementById('food-image').innerHTML = '';
-                currentFood = null;
+                clearPendingZone();
+                pendingFood = null;
                 return;
             }
+            // 只允許待分類區同時一張
+            clearPendingZone();
+
             const randomFood = allFoods[Math.floor(Math.random() * allFoods.length)];
-            currentFood = {
+            pendingFood = {
+                id: randomFood.id,
                 data: randomFood.data,
                 isHealthy: foodDB.good.some(f => f.id === randomFood.id)
             };
-            document.getElementById('food-image').innerHTML =
-                `<img src="${currentFood.data}" style="width:100%; height:100%; object-fit:contain;">`;
-            // 更新挑戰張數
-            updateScoreTable();
+            // 加入待分類區
+            const img = document.createElement('img');
+            img.src = pendingFood.data;
+            img.className = 'food-img';
+            img.setAttribute('data-id', pendingFood.id);
+            img.setAttribute('draggable', 'true');
+            document.getElementById('pending-zone').appendChild(img);
         }
 
-        function chooseCategory(type) {
-            if (!currentFood) {
-                alert("請先按『取得食物照片』！");
-                return;
+        function clearPendingZone() {
+            document.getElementById('pending-zone').innerHTML = '<div class="zone-title">待分類</div>';
+        }
+
+        // 拖曳功能（用 SortableJS）
+        // 只允許從pending-zone拖到good-zone或bad-zone
+        let goodZone = document.getElementById('good-zone');
+        let badZone = document.getElementById('bad-zone');
+        let pendingZone = document.getElementById('pending-zone');
+
+        // 初始化三個區域
+        Sortable.create(pendingZone, {
+            group: {
+                name: 'food',
+                pull: 'clone',
+                put: false
+            },
+            sort: false,
+            animation: 150
+        });
+
+        Sortable.create(goodZone, {
+            group: {
+                name: 'food',
+                pull: false,
+                put: true
+            },
+            animation: 150,
+            onAdd: function (evt) {
+                handleDrop('good');
             }
+        });
+
+        Sortable.create(badZone, {
+            group: {
+                name: 'food',
+                pull: false,
+                put: true
+            },
+            animation: 150,
+            onAdd: function (evt) {
+                handleDrop('bad');
+            }
+        });
+
+        function handleDrop(zoneType) {
+            if (!pendingFood) return;
             if (!currentTeam) {
                 alert('請先選擇隊伍！');
+                clearPendingZone();
                 return;
             }
             if (teams[currentTeam].count >= 10) {
                 alert('本隊已挑戰10張，請更換隊伍！');
+                clearPendingZone();
                 return;
             }
-            const isGoodZone = (type === 'good');
-            const isCorrect = (isGoodZone === currentFood.isHealthy);
+            const isGoodZone = (zoneType === 'good');
+            const isCorrect = (isGoodZone === pendingFood.isHealthy);
             teams[currentTeam].count += 1;
             if (isCorrect) teams[currentTeam].score += 1;
             showFeedback(isCorrect);
             updateScoreTable();
-            // 10次後提醒
-            if (teams[currentTeam].count >= 10) {
-                setTimeout(()=>{
+            setTimeout(() => {
+                clearPendingZone();
+                pendingFood = null;
+                if (teams[currentTeam].count >= 10) {
                     alert('本隊已挑戰10張，請更換隊伍！');
-                    document.getElementById('food-image').innerHTML = '';
-                    currentFood = null;
-                }, 500);
-            } else {
-                setTimeout(fetchNewFood, 900);
-            }
+                } else {
+                    addRandomFoodToPending();
+                }
+            }, 600);
         }
 
         function showFeedback(isCorrect) {
@@ -236,7 +303,7 @@
         }
 
         // 初始提示
-        alert('使用步驟：\n1. 先上傳好/壞食物照片\n2. 選擇隊伍\n3. 點「取得食物照片」開始遊戲\n4. 點選分類按鈕進行分類\n5. 每隊挑戰10張後請更換隊伍');
+        alert('使用步驟：\n1. 先上傳好/壞食物照片\n2. 選擇隊伍\n3. 按「取得食物照片」\n4. 用手指或滑鼠將照片拖曳到分類區\n5. 每隊挑戰10張後請更換隊伍');
     </script>
 </body>
 </html>
