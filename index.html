@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>行動版食物分類遊戲</title>
+    <title>行動版食物分類遊戲（隊伍模式）</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <style>
         body { padding: 10px; font-size: 16px; }
@@ -25,6 +25,38 @@
         #score-board { font-size: 24px; color: #2e7d32; margin: 15px 0; padding: 10px; background-color: #f5f5f5; border-radius: 5px; display: inline-block;}
         .feedback { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 40px; display: none; z-index: 1000;}
         button { padding: 12px 20px; font-size: 16px; }
+        .team-row { display: flex; gap: 10px; margin-bottom: 10px; justify-content: center;}
+        .team-btn {
+            padding: 8px 18px;
+            border-radius: 8px;
+            border: 2px solid #888;
+            background: #f0f0f0;
+            font-size: 17px;
+            cursor: pointer;
+        }
+        .team-btn.selected {
+            background: #ffd54f;
+            border: 2px solid #fbc02d;
+        }
+        .score-table {
+            margin: 12px auto 20px auto;
+            border-collapse: collapse;
+            width: 95%;
+            max-width: 400px;
+            background: #fffde7;
+        }
+        .score-table th, .score-table td {
+            border: 1px solid #cfcfcf;
+            padding: 7px 5px;
+            text-align: center;
+        }
+        .score-table th {
+            background: #ffe082;
+        }
+        .score-table td {
+            font-size: 18px;
+        }
+        #current-team { font-size: 18px; margin-bottom: 10px; color: #1976d2;}
     </style>
 </head>
 <body>
@@ -35,8 +67,42 @@
         <button onclick="document.getElementById('bad-upload').click()">上傳壞食物</button>
     </div>
 
+    <div class="team-row">
+        <button class="team-btn" id="team-lychee" onclick="selectTeam('荔枝隊')">荔枝隊</button>
+        <button class="team-btn" id="team-grape" onclick="selectTeam('萄葡隊')">萄葡隊</button>
+        <button class="team-btn" id="team-watermelon" onclick="selectTeam('西瓜隊')">西瓜隊</button>
+    </div>
+    <div id="current-team">目前隊伍：<span id="current-team-name">請選擇隊伍</span></div>
+
+    <table class="score-table">
+        <thead>
+            <tr>
+                <th>隊伍</th>
+                <th>分數</th>
+                <th>已挑戰張數</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>荔枝隊</td>
+                <td id="score-荔枝隊">0</td>
+                <td id="count-荔枝隊">0</td>
+            </tr>
+            <tr>
+                <td>萄葡隊</td>
+                <td id="score-萄葡隊">0</td>
+                <td id="count-萄葡隊">0</td>
+            </tr>
+            <tr>
+                <td>西瓜隊</td>
+                <td id="score-西瓜隊">0</td>
+                <td id="count-西瓜隊">0</td>
+            </tr>
+        </tbody>
+    </table>
+
     <button onclick="fetchNewFood()">取得食物照片</button>
-    <div id="score-board">分數：0</div>
+    <div id="score-board">本隊分數：0</div>
     <div id="food-image"></div>
     
     <div class="category-row">
@@ -71,15 +137,47 @@
         document.getElementById('good-upload').addEventListener('change', (e) => handleUpload(e.target.files, 'good'));
         document.getElementById('bad-upload').addEventListener('change', (e) => handleUpload(e.target.files, 'bad'));
 
-        // 遊戲邏輯
-        let currentFood = null;
-        let score = 0;
+        // 隊伍資料
+        const teams = {
+            '荔枝隊': {score: 0, count: 0},
+            '萄葡隊': {score: 0, count: 0},
+            '西瓜隊': {score: 0, count: 0}
+        };
+        let currentTeam = null;
 
-        function updateScoreBoard() {
-            document.getElementById('score-board').innerText = '分數：' + score;
+        function selectTeam(team) {
+            currentTeam = team;
+            document.getElementById('current-team-name').innerText = team;
+            document.getElementById('score-board').innerText = `本隊分數：${teams[team].score}`;
+            // 標示選取
+            document.querySelectorAll('.team-btn').forEach(btn=>btn.classList.remove('selected'));
+            document.getElementById('team-lychee').classList.toggle('selected', team==='荔枝隊');
+            document.getElementById('team-grape').classList.toggle('selected', team==='萄葡隊');
+            document.getElementById('team-watermelon').classList.toggle('selected', team==='西瓜隊');
+            updateScoreTable();
         }
 
+        function updateScoreTable() {
+            for (let team in teams) {
+                document.getElementById('score-'+team).innerText = teams[team].score;
+                document.getElementById('count-'+team).innerText = teams[team].count;
+            }
+            if (currentTeam)
+                document.getElementById('score-board').innerText = `本隊分數：${teams[currentTeam].score}`;
+        }
+
+        // 遊戲邏輯
+        let currentFood = null;
+
         function fetchNewFood() {
+            if (!currentTeam) {
+                alert('請先選擇隊伍！');
+                return;
+            }
+            if (teams[currentTeam].count >= 10) {
+                alert('本隊已挑戰10張，請更換隊伍！');
+                return;
+            }
             const allFoods = [...foodDB.good, ...foodDB.bad];
             if (allFoods.length === 0) {
                 alert('請先上傳照片！');
@@ -94,6 +192,8 @@
             };
             document.getElementById('food-image').innerHTML =
                 `<img src="${currentFood.data}" style="width:100%; height:100%; object-fit:contain;">`;
+            // 更新挑戰張數
+            updateScoreTable();
         }
 
         function chooseCategory(type) {
@@ -101,12 +201,30 @@
                 alert("請先按『取得食物照片』！");
                 return;
             }
+            if (!currentTeam) {
+                alert('請先選擇隊伍！');
+                return;
+            }
+            if (teams[currentTeam].count >= 10) {
+                alert('本隊已挑戰10張，請更換隊伍！');
+                return;
+            }
             const isGoodZone = (type === 'good');
             const isCorrect = (isGoodZone === currentFood.isHealthy);
-            if (isCorrect) score += 1;
+            teams[currentTeam].count += 1;
+            if (isCorrect) teams[currentTeam].score += 1;
             showFeedback(isCorrect);
-            updateScoreBoard();
-            setTimeout(fetchNewFood, 900);
+            updateScoreTable();
+            // 10次後提醒
+            if (teams[currentTeam].count >= 10) {
+                setTimeout(()=>{
+                    alert('本隊已挑戰10張，請更換隊伍！');
+                    document.getElementById('food-image').innerHTML = '';
+                    currentFood = null;
+                }, 500);
+            } else {
+                setTimeout(fetchNewFood, 900);
+            }
         }
 
         function showFeedback(isCorrect) {
@@ -118,7 +236,7 @@
         }
 
         // 初始提示
-        alert('使用步驟：\n1. 先上傳好/壞食物照片\n2. 點「取得食物照片」開始遊戲\n3. 點選分類按鈕進行分類');
+        alert('使用步驟：\n1. 先上傳好/壞食物照片\n2. 選擇隊伍\n3. 點「取得食物照片」開始遊戲\n4. 點選分類按鈕進行分類\n5. 每隊挑戰10張後請更換隊伍');
     </script>
 </body>
 </html>
