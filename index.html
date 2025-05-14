@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>行動版食物分類遊戲（拖曳支援+冠軍+掌聲）</title>
+    <title>行動版食物分類遊戲（拖曳支援+冠軍+音效）</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <style>
         body { padding: 10px; font-size: 16px; }
@@ -138,7 +138,12 @@
 
     <div id="correct-feedback" class="feedback">✅ 正確！</div>
     <div id="wrong-feedback" class="feedback">❌ 錯誤！</div>
-    <audio id="applause-sound" src="https://assets.mixkit.co/active_storage/sfx/2593/2593-preview.mp3"></audio>
+
+    <!-- 音效區 -->
+    <audio id="new-photo-sound" src="https://assets.mixkit.co/sfx/preview/mixkit-positive-notification-951.mp3"></audio>
+    <audio id="correct-sound" src="https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3"></audio>
+    <audio id="wrong-sound" src="https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3"></audio>
+    <audio id="cheer-sound" src="https://assets.mixkit.co/sfx/preview/mixkit-people-cheering-announcement-480.mp3"></audio>
 
     <script>
         // 照片資料庫
@@ -204,7 +209,7 @@
             return Object.values(teams).every(team => team.count >= 10);
         }
 
-        // 標示冠軍並播放掌聲
+        // 標示冠軍並播放歡呼音效
         function highlightChampions() {
             removeChampionIcons();
             // 取得所有分數
@@ -223,16 +228,12 @@
                 icon.textContent = ' 🏆';
                 scoreCell.appendChild(icon);
             });
-            // 播放掌聲
+            // 播放歡呼音效3秒
             if (champions.length > 0) {
-                const audio = document.getElementById('applause-sound');
-                audio.play().catch(error => {
-                    // 處理瀏覽器自動播放限制
-                    // 可以在第一次互動時播放空音效解除限制
-                });
+                playSound('cheer');
                 setTimeout(() => {
-                    audio.pause();
-                    audio.currentTime = 0;
+                    document.getElementById('cheer-sound').pause();
+                    document.getElementById('cheer-sound').currentTime = 0;
                 }, 3000);
             }
         }
@@ -283,6 +284,9 @@
             img.setAttribute('data-id', pendingFood.id);
             img.setAttribute('draggable', 'true');
             document.getElementById('pending-zone').appendChild(img);
+
+            // 播放新照片提示音
+            playSound('new-photo');
         }
 
         function clearPendingZone() {
@@ -353,6 +357,14 @@
             if (isCorrect) teams[currentTeam].score += 1;
             // 記錄已挑戰過的照片ID
             teams[currentTeam].used.push(pendingFood.id);
+
+            // 音效
+            if (isCorrect) {
+                playSound('correct');
+            } else {
+                playSound('wrong');
+            }
+
             showFeedback(isCorrect);
             updateScoreTable();
             setTimeout(() => {
@@ -374,8 +386,25 @@
             }, 500);
         }
 
+        // 統一音效播放
+        function playSound(type) {
+            const audioMap = {
+                'new-photo': document.getElementById('new-photo-sound'),
+                'correct': document.getElementById('correct-sound'),
+                'wrong': document.getElementById('wrong-sound'),
+                'cheer': document.getElementById('cheer-sound')
+            };
+            const audio = audioMap[type];
+            if (audio) {
+                audio.currentTime = 0;
+                audio.play().catch(error => {
+                    // 通常第一次互動後才可自動播放
+                });
+            }
+        }
+
         // 初始提示
-        alert('使用步驟：\n1. 先上傳好/壞食物照片\n2. 選擇隊伍\n3. 按「取得食物照片」\n4. 用手指或滑鼠將照片拖曳到分類區\n5. 每隊挑戰10張且不重覆，三隊皆完成自動標示冠軍與掌聲');
+        alert('使用步驟：\n1. 先上傳好/壞食物照片\n2. 選擇隊伍\n3. 按「取得食物照片」\n4. 用手指或滑鼠將照片拖曳到分類區\n5. 每隊挑戰10張且不重覆，三隊皆完成自動標示冠軍與歡呼音效');
     </script>
 </body>
 </html>
