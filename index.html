@@ -1,88 +1,96 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>食物分類遊戲</title>
+    <title>行動版食物分類遊戲</title>
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
     <style>
-        .container {
-            display: flex;
-            gap: 20px;
-        }
-        #food-image {
-            width: 200px;
-            height: 200px;
-            border: 2px dashed #ccc;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        #food-image img {
-            max-width: 100%;
-            max-height: 100%;
-        }
-        .drop-zone {
-            width: 300px;
-            height: 400px;
-            border: 3px solid #333;
-            padding: 10px;
-        }
+        /* 移動設備優化 */
+        body { padding: 10px; font-size: 16px; }
+        .container { display: flex; flex-direction: column; gap: 15px; }
+        .upload-section { display: flex; gap: 10px; margin-bottom: 20px; }
+        #food-image { width: 200px; height: 200px; border: 2px dashed #ccc; margin: 0 auto; }
+        .drop-zone { width: 90%; height: 300px; border: 3px solid #333; padding: 10px; margin: 10px auto; }
         #good-zone { background-color: #e8f5e9; }
         #bad-zone { background-color: #ffebee; }
-        .feedback {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 40px;
-            display: none;
-            z-index: 1000;
-        }
-        #score-board {
-            font-size: 24px;
-            color: #2e7d32;
-            margin: 15px 0;
-            padding: 10px;
-            background-color: #f5f5f5;
-            border-radius: 5px;
-            display: inline-block;
-        }
+        .feedback { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 40px; display: none; }
+        button { padding: 12px 20px; font-size: 16px; }
     </style>
 </head>
 <body>
-    <button id="get-food-btn">取得新食物圖片</button>
+    <div class="upload-section">
+        <input type="file" id="good-upload" accept="image/*" multiple style="display:none;">
+        <button onclick="document.getElementById('good-upload').click()">上傳好食物</button>
+        
+        <input type="file" id="bad-upload" accept="image/*" multiple style="display:none;">
+        <button onclick="document.getElementById('bad-upload').click()">上傳壞食物</button>
+    </div>
+
+    <button onclick="fetchNewFood()">取得食物照片</button>
     <div id="score-board">分數：0</div>
     <div id="food-image"></div>
+    
     <div class="container">
         <div id="good-zone" class="drop-zone">好食物區</div>
         <div id="bad-zone" class="drop-zone">壞食物區</div>
     </div>
+
     <div id="correct-feedback" class="feedback">✅ 正確！</div>
     <div id="wrong-feedback" class="feedback">❌ 錯誤！</div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
     <script>
-        let currentFoodUrl = null;
+        // 儲存照片的虛擬資料庫
+        let foodDB = {
+            good: [], // 格式: {id: 'good1', data: 'base64字串'}
+            bad: []   // 格式: {id: 'bad1', data: 'base64字串'}
+        };
+
+        // 檔案上傳處理
+        function handleUpload(files, type) {
+            Array.from(files).forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const foodId = `${type}${foodDB[type].length + 1}`;
+                    foodDB[type].push({id: foodId, data: e.target.result});
+                };
+                reader.readAsDataURL(file);
+            });
+            alert(`${files.length} 張${type==='good'?'好':'壞'}食物照片已加入！`);
+        }
+
+        // 綁定上傳事件
+        document.getElementById('good-upload').addEventListener('change', (e) => handleUpload(e.target.files, 'good'));
+        document.getElementById('bad-upload').addEventListener('change', (e) => handleUpload(e.target.files, 'bad'));
+
+        // 遊戲邏輯
+        let currentFood = null;
         let score = 0;
 
         function updateScoreBoard() {
             $('#score-board').text('分數：' + score);
         }
 
-        // 取得新食物圖片
         function fetchNewFood() {
-            $('#food-image').html('載入中...');
-            $.get("https://foodish-api.com/api/", function(data) {
-                currentFoodUrl = data.image;
-                $('#food-image').html(
-                    `<img src="${data.image}" alt="食物圖片" class="draggable" style="width:100%;height:100%;object-fit:contain;">`
-                );
-                initDraggable();
-            });
+            const allFoods = [...foodDB.good, ...foodDB.bad];
+            if (allFoods.length === 0) {
+                alert('請先上傳照片！');
+                return;
+            }
+
+            const randomFood = allFoods[Math.floor(Math.random() * allFoods.length)];
+            currentFood = {
+                data: randomFood.data,
+                isHealthy: foodDB.good.some(f => f.id === randomFood.id)
+            };
+
+            $('#food-image').html(
+                `<img src="${currentFood.data}" class="draggable" 
+                 style="width:100%; height:100%; object-fit:contain">`
+            );
+            initDraggable();
         }
 
-        // 拖曳初始化
         function initDraggable() {
             $(".draggable").draggable({
                 revert: "invalid",
@@ -90,36 +98,15 @@
             });
         }
 
-        // 健康食物簡易判斷（可根據圖片網址關鍵字判斷）
-        function checkFoodHealth(imageUrl) {
-            // Foodish API 圖片網址包含類別，可用於簡單判斷
-            // healthy: salad, rice, pasta, sandwich, sushi
-            // unhealthy: burger, pizza, dessert, fries
-            const healthyKeywords = ['salad', 'rice', 'pasta', 'sandwich', 'sushi'];
-            const unhealthyKeywords = ['burger', 'pizza', 'dessert', 'fries'];
-            imageUrl = imageUrl.toLowerCase();
-            if (healthyKeywords.some(kw => imageUrl.includes(kw))) return true;
-            if (unhealthyKeywords.some(kw => imageUrl.includes(kw))) return false;
-            // 無法判斷時，預設為不健康
-            return false;
-        }
-
-        // 拖曳區域設定
         $("#good-zone, #bad-zone").droppable({
             accept: ".draggable",
             drop: function(event, ui) {
                 const isGoodZone = $(this).attr('id') === 'good-zone';
-                const isHealthy = checkFoodHealth(currentFoodUrl);
-
-                if (isGoodZone === isHealthy) {
-                    score += 1;
-                    showFeedback(true);
-                } else {
-                    showFeedback(false);
-                }
+                const isCorrect = (isGoodZone === currentFood.isHealthy);
+                
+                if (isCorrect) score += 1;
+                showFeedback(isCorrect);
                 updateScoreBoard();
-                // 移除圖片，等待下一張
-                $('#food-image').empty();
                 setTimeout(fetchNewFood, 1000);
             }
         });
@@ -129,14 +116,8 @@
             $(feedback).fadeIn().delay(500).fadeOut();
         }
 
-        // 按鈕綁定
-        $('#get-food-btn').on('click', fetchNewFood);
-
-        // 頁面載入時自動取得一張圖片
-        $(function(){
-            fetchNewFood();
-            updateScoreBoard();
-        });
+        // 初始提示
+        alert('使用步驟：\n1. 先上傳好/壞食物照片\n2. 點「取得食物照片」開始遊戲');
     </script>
 </body>
 </html>
