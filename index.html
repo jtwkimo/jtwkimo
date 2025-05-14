@@ -8,17 +8,18 @@
             display: flex;
             gap: 20px;
         }
-        #food-images {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .food-img {
-            width: 150px;
-            height: 150px;
-            object-fit: cover;
+        #food-image {
+            width: 200px;
+            height: 200px;
             border: 2px dashed #ccc;
-            cursor: move;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #food-image img {
+            max-width: 100%;
+            max-height: 100%;
         }
         .drop-zone {
             width: 300px;
@@ -35,6 +36,7 @@
             transform: translate(-50%, -50%);
             font-size: 40px;
             display: none;
+            z-index: 1000;
         }
         #score-board {
             font-size: 24px;
@@ -45,18 +47,12 @@
             border-radius: 5px;
             display: inline-block;
         }
-        #search-bar {
-            margin-bottom: 10px;
-        }
     </style>
 </head>
 <body>
-    <div id="search-bar">
-        <input type="text" id="search-input" placeholder="輸入食物關鍵字，例如 chicken">
-        <button onclick="searchFood()">搜尋食物圖片</button>
-    </div>
+    <button id="get-food-btn">取得新食物圖片</button>
     <div id="score-board">分數：0</div>
-    <div id="food-images"></div>
+    <div id="food-image"></div>
     <div class="container">
         <div id="good-zone" class="drop-zone">好食物區</div>
         <div id="bad-zone" class="drop-zone">壞食物區</div>
@@ -67,33 +63,26 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
     <script>
+        let currentFoodUrl = null;
         let score = 0;
 
         function updateScoreBoard() {
             $('#score-board').text('分數：' + score);
         }
 
-        // 搜尋食物圖片
-        function searchFood() {
-            const keyword = $('#search-input').val().trim();
-            if (!keyword) {
-                alert('請輸入關鍵字');
-                return;
-            }
-            $('#food-images').empty();
-            $.get(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(keyword)}`, function(data) {
-                if (!data.meals) {
-                    $('#food-images').html('<div>查無此食物，請嘗試其他關鍵字。</div>');
-                    return;
-                }
-                data.meals.slice(0, 5).forEach(meal => {
-                    const img = $(`<img src="${meal.strMealThumb}" alt="${meal.strMeal}" class="food-img draggable" data-name="${meal.strMeal}">`);
-                    $('#food-images').append(img);
-                });
+        // 取得新食物圖片
+        function fetchNewFood() {
+            $('#food-image').html('載入中...');
+            $.get("https://foodish-api.com/api/", function(data) {
+                currentFoodUrl = data.image;
+                $('#food-image').html(
+                    `<img src="${data.image}" alt="食物圖片" class="draggable" style="width:100%;height:100%;object-fit:contain;">`
+                );
                 initDraggable();
             });
         }
 
+        // 拖曳初始化
         function initDraggable() {
             $(".draggable").draggable({
                 revert: "invalid",
@@ -101,20 +90,26 @@
             });
         }
 
-        // 健康食物簡易判斷（可依實際需求擴充）
-        function checkFoodHealth(name) {
-            // 範例：含salad, fruit, vegetable, chicken, fish等字樣視為好食物
-            const healthyKeywords = ['salad', 'fruit', 'vegetable', 'chicken', 'fish', 'egg', 'rice', 'soup', 'vegetarian'];
-            name = name.toLowerCase();
-            return healthyKeywords.some(kw => name.includes(kw));
+        // 健康食物簡易判斷（可根據圖片網址關鍵字判斷）
+        function checkFoodHealth(imageUrl) {
+            // Foodish API 圖片網址包含類別，可用於簡單判斷
+            // healthy: salad, rice, pasta, sandwich, sushi
+            // unhealthy: burger, pizza, dessert, fries
+            const healthyKeywords = ['salad', 'rice', 'pasta', 'sandwich', 'sushi'];
+            const unhealthyKeywords = ['burger', 'pizza', 'dessert', 'fries'];
+            imageUrl = imageUrl.toLowerCase();
+            if (healthyKeywords.some(kw => imageUrl.includes(kw))) return true;
+            if (unhealthyKeywords.some(kw => imageUrl.includes(kw))) return false;
+            // 無法判斷時，預設為不健康
+            return false;
         }
 
+        // 拖曳區域設定
         $("#good-zone, #bad-zone").droppable({
             accept: ".draggable",
             drop: function(event, ui) {
                 const isGoodZone = $(this).attr('id') === 'good-zone';
-                const foodName = ui.draggable.data('name');
-                const isHealthy = checkFoodHealth(foodName);
+                const isHealthy = checkFoodHealth(currentFoodUrl);
 
                 if (isGoodZone === isHealthy) {
                     score += 1;
@@ -123,7 +118,9 @@
                     showFeedback(false);
                 }
                 updateScoreBoard();
-                ui.draggable.remove(); // 拖曳後移除圖片
+                // 移除圖片，等待下一張
+                $('#food-image').empty();
+                setTimeout(fetchNewFood, 1000);
             }
         });
 
@@ -132,7 +129,14 @@
             $(feedback).fadeIn().delay(500).fadeOut();
         }
 
-        updateScoreBoard();
+        // 按鈕綁定
+        $('#get-food-btn').on('click', fetchNewFood);
+
+        // 頁面載入時自動取得一張圖片
+        $(function(){
+            fetchNewFood();
+            updateScoreBoard();
+        });
     </script>
 </body>
 </html>
