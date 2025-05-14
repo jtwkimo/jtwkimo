@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>行動版食物分類遊戲（拖曳支援）</title>
+    <title>行動版食物分類遊戲（拖曳支援+冠軍+掌聲）</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <style>
         body { padding: 10px; font-size: 16px; }
@@ -65,6 +65,17 @@
             object-fit: contain;
         }
         button { padding: 12px 20px; font-size: 16px; }
+        .champion-icon {
+            display: inline-block;
+            color: #e67e22;
+            font-size: 24px;
+            margin-left: 8px;
+            animation: bounce 1s infinite;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 </head>
@@ -127,6 +138,7 @@
 
     <div id="correct-feedback" class="feedback">✅ 正確！</div>
     <div id="wrong-feedback" class="feedback">❌ 錯誤！</div>
+    <audio id="applause-sound" src="https://assets.mixkit.co/active_storage/sfx/2593/2593-preview.mp3"></audio>
 
     <script>
         // 照片資料庫
@@ -161,8 +173,9 @@
         let currentTeam = null;
 
         function selectTeam(team) {
-            // 切換隊伍時清空分類區
+            // 切換隊伍時清空分類區與冠軍標示
             clearAllZones();
+            removeChampionIcons();
             currentTeam = team;
             document.getElementById('current-team-name').innerText = team;
             document.getElementById('score-board').innerText = `本隊分數：${teams[team].score}`;
@@ -180,6 +193,52 @@
             }
             if (currentTeam)
                 document.getElementById('score-board').innerText = `本隊分數：${teams[currentTeam].score}`;
+            // 冠軍檢查
+            if (checkAllTeamsCompleted()) {
+                highlightChampions();
+            }
+        }
+
+        // 判斷三隊是否都完成
+        function checkAllTeamsCompleted() {
+            return Object.values(teams).every(team => team.count >= 10);
+        }
+
+        // 標示冠軍並播放掌聲
+        function highlightChampions() {
+            removeChampionIcons();
+            // 取得所有分數
+            const allScores = Object.entries(teams).map(([name, data]) => ({
+                name: name,
+                score: data.score
+            }));
+            // 找最高分
+            const maxScore = Math.max(...allScores.map(s => s.score));
+            const champions = allScores.filter(s => s.score === maxScore);
+            // 標示冠軍
+            champions.forEach(champ => {
+                const scoreCell = document.getElementById(`score-${champ.name}`);
+                const icon = document.createElement('span');
+                icon.className = 'champion-icon';
+                icon.textContent = ' 🏆';
+                scoreCell.appendChild(icon);
+            });
+            // 播放掌聲
+            if (champions.length > 0) {
+                const audio = document.getElementById('applause-sound');
+                audio.play().catch(error => {
+                    // 處理瀏覽器自動播放限制
+                    // 可以在第一次互動時播放空音效解除限制
+                });
+                setTimeout(() => {
+                    audio.pause();
+                    audio.currentTime = 0;
+                }, 3000);
+            }
+        }
+
+        function removeChampionIcons() {
+            document.querySelectorAll('.champion-icon').forEach(el => el.remove());
         }
 
         // 拖曳邏輯
@@ -316,7 +375,7 @@
         }
 
         // 初始提示
-        alert('使用步驟：\n1. 先上傳好/壞食物照片\n2. 選擇隊伍\n3. 按「取得食物照片」\n4. 用手指或滑鼠將照片拖曳到分類區\n5. 每隊挑戰10張且不重覆，請更換隊伍');
+        alert('使用步驟：\n1. 先上傳好/壞食物照片\n2. 選擇隊伍\n3. 按「取得食物照片」\n4. 用手指或滑鼠將照片拖曳到分類區\n5. 每隊挑戰10張且不重覆，三隊皆完成自動標示冠軍與掌聲');
     </script>
 </body>
 </html>
